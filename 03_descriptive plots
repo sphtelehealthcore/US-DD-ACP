@@ -218,9 +218,7 @@ plot_LPA_SDM_us <- ggplot(summary_df4_US, aes(x = variable, y = prop * 100, fill
 
 # 04. Final list of plots ----
 plot_FinDel_SDM_us
-
 plot_MedDel_SDM_us
-
 plot_LPA_SDM_us
 
 ggsave("02_analysis/02_results/plots/plot_FinDel_SDM_us.png", plot_FinDel_SDM_us, width = 15, height = 8, units = "in", dpi = 600)
