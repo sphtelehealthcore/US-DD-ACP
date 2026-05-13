@@ -1,5 +1,6 @@
-# Subgroup analyses where focusing only on those with physical/cognitive limitations 
-  # Different research question: would formalisation of digital delegation
+#********************************************************************************************************
+# Subgroup analyses where focusing only on those with physical/cognitive limitations ====================
+#********************************************************************************************************
   
   # Inspect the reasons for helping
   View(data.frame(FinanceManageReasons = my.dat.us$FinanceManageReasons)) # Q5.18 - reasons for helping with financial digital task
@@ -34,8 +35,8 @@
 ## Comprehensive list of all the variables that will be used in analyses
 ## Modify here if necessary to ensure consistency throughout
   indep_demo = c("GenderFemale", "Age", "Marital_3L", "Ethnicity_4L", "Education_3L", "Housing", "Employed", "Income_4L", "Religion_5L", "Sibling_4L") # "Citizen" - should not include
-  indep_care = c("IADL", "ADL", "lowstakeMed") # "IADL_HelpDigital" -> REMOVED POST R1 AS ALREADY INCLUDED AS PART OF IADL
-  indep_care_num = c("help_physical", "help_finance", "help_medical") # ADDED POST R1 TO REFLECT THE EXTENT OF CAREGIVING EXPERIENCE
+  indep_care = c("IADL", "ADL", "lowstakeMed")
+  indep_care_num = c("help_physical", "help_finance", "help_medical")
   indep_delegation = c("FinanceDelegate2", "MedicalDelegate2")
   indep_LPA = c("FinanceLPA")
   dep_var = c("highstakeMed_ever", "highstakeMed_count", "highstakeMed_domain_count")
@@ -49,7 +50,7 @@
     df <- my.dat.us[my.dat.us$DigiAssist_reason_limitation == 1,]
     df <- droplevels(df) #remove unused levels (especially among ethnicity levels)
     
-    #==== 02.1  Completed any of the SDM items =============
+#==== 02.1  Completed any of the SDM items =============
     #**** Dependent variable: highstakeMed_ever_bin ******** 
     
     df$highstakeMed_ever_bin <- as.numeric(df$highstakeMed_ever) - 1 # OLS and logit does not work on factors
@@ -60,7 +61,7 @@
                              family = "binomial",
                              data = df)
     
-    #==== 02.2  Number of Completed SDM items =============
+#==== 02.2  Number of Completed SDM items =============
     #**** Dependent variable: highstakeMed_count ******** 
     
     # nbreg
@@ -68,7 +69,7 @@
                                       data = df)
     model2_itemcounts_nbreg_ame <- margins(model2_itemcounts_nbreg, data = df)
     
-    #==== 02.3  Number of Completed SDM domains (out of 5) =============
+#==== 02.3  Number of Completed SDM domains (out of 5) =============
     #**** Dependent variable: highstakeMed_domain_count ******** 
     
     # Ordered logit model
@@ -102,7 +103,7 @@
     
     
 #**** BIVARIABLE LOGISTICS REGS ONLY ********
-# Run the logistic regression as binary as most within n = 171 have already done at least 1 ADL
+# Logistic regression as binary as most within n = 171 have already done at least 1 ADL
   tabyl(df$highstakeMed_ever_bin) # n_yes = 159 (92.98%)
 
   var <- c(indep_care, indep_delegation, indep_LPA)
@@ -147,4 +148,73 @@
   final_table <- do.call(rbind, results)
   
   print(final_table)
+
+
+
+#********************************************************************************************
+# INTERACTIONS TERMS WITH LOW SES             ********======================================
+#********************************************************************************************
+
+#**** INTERACTIONS WITH LOW SES *******
+  df <- df_IADL_us
+  df <- droplevels(df) #remove unused levels (especially among ethnicity levels)
+  tabyl(df$"Ethnicity_4L")
+  tabyl(df$"Education_3L")
+  tabyl(df$"Income_4L")
   
+  df$lowSES <- ifelse(
+      (df$Income_4L == "<$30k" | df$Income_4L == "$30k - <50k") &
+      df$Ethnicity_4L != "White" &
+      df$Education_3L != "Degree and above",
+    1,0)
+  tabyl(df$lowSES) # n = 76 (12.8%)
+  df$lowSES <- factor(df$lowSES,
+                      levels = c(0, 1), 
+                      labels = c("Not low SES", "Low SES")) # turn into a factor
+  
+  # Redefine Independent variables
+  temp <- paste(c(indep_demo, indep_care, indep_care_num, indep_LPA, # indep_delegation
+                  "FinanceDelegate2*lowSES",
+                  "MedicalDelegate2*lowSES"),
+                collapse = " + ")
+  
+  #**** REGRESSIONS INTERACTIONS WITH LOW SES *******
+  # Logit: 02.1  Completed any of the SDM items
+  df$highstakeMed_ever_bin <- as.numeric(df$highstakeMed_ever) - 1 # OLS and logit does not work on factors
+  tabyl(df, highstakeMed_ever_bin)
+  model1_ever_logit <- glm(as.formula(paste("highstakeMed_ever_bin","~", temp)),
+                           family = "binomial",
+                           data = df)
+  
+  # nbreg: 02.2  Number of Completed SDM items
+  model2_itemcounts_nbreg <- glm.nb(as.formula(paste("highstakeMed_count","~", temp)),
+                                    data = df)
+  model2_itemcounts_nbreg_ame <- margins(model2_itemcounts_nbreg, data = df)
+  
+  # Ordered logit model: 02.3  Number of Completed SDM domains (out of 5)
+  model3_domaincounts_ologit <- clm(as.formula(paste("as.factor(highstakeMed_domain_count)","~", temp))
+                                    , data = df, link = "logit")  # "probit", "cloglog" available
+  
+  
+  # Export
+  summary(model1_ever_logit)
+  summary(model2_itemcounts_nbreg)
+  summary(model2_itemcounts_nbreg_ame)
+  summary(model3_domaincounts_ologit)
+  
+  output_path_ever <- paste0("02_analysis/02_results/5.2_SDM_US_N594_SES interactions", ".docx")
+  
+  modelsummary(
+    list("Model 1 - Logit (OR)" = model1_ever_logit,
+         "Model 2 - Negative binomial" = model2_itemcounts_nbreg,
+         "Model 2 - Negative binomial (Average marginal effets)" = model2_itemcounts_nbreg_ame,
+         "Model 3 - Ordered logit (OR)" = model3_domaincounts_ologit),
+    exponentiate = c(TRUE, FALSE, FALSE, TRUE),
+    estimate = "{estimate}{stars} [{conf.low}, {conf.high}] ({p.value})",       # everything in a single cell:
+    statistic = NULL,                              # don't add separate rows
+    conf_level = 0.95,
+    fmt = 3,
+    stars = TRUE,
+    gof_omit = NULL,
+    output = output_path_ever  # or "latex", "html", "docx", "xlsx", etc.
+  )
