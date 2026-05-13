@@ -1,0 +1,381 @@
+# 03. PLOTTING
+
+# 03.2 Percentage of 5-domain completion ----
+summary_df <- df_IADL_us %>%
+  pivot_longer(cols = c(MedicalDecision_ever, MedicalWorth_ever, MedicalEnd_ever, MedicalFlex_ever, MedicalAskDoc_ever, highstakeMed_ever),
+               names_to = "variable", values_to = "response") %>%
+  group_by(variable) %>%
+  summarise(
+    p = mean(response == "1 - Done before"),
+    n = n(),
+    se = sqrt(p * (1 - p) / n),
+    lower = p - 1.96 * se,
+    upper = p + 1.96 * se,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    lower = pmax(0, lower),
+    upper = pmin(1, upper),
+    variable = factor(variable, levels = c("MedicalAskDoc_ever", "MedicalFlex_ever", "MedicalEnd_ever", "MedicalWorth_ever", "MedicalDecision_ever", "highstakeMed_ever"),
+                      labels = c("Asking Questions of medical providers",
+                                 "Flexibility for surrogate decision making",
+                                 "Quality of Life (Medical Care)",
+                                 "Quality of Life (Health Situations)",
+                                 "Role of Medical Decision Making",
+                                 "Discussed any SDM domains"))
+  )
+
+ggplot(summary_df, aes(x = variable, y = p)) +
+  geom_col(fill = "darkorange") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  geom_text(
+    aes(label = paste0(formatC(100 * p, format = "f", digits = 1), "%")),  # format label -> formatC is there to force 1dp
+    hjust = -0.5,                                # position to the right of the bar
+    size = 4
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1),
+                     limits = c(0,1)) +
+  labs(x = NULL, y = NULL) +
+  coord_flip() +
+  theme_minimal()
+
+#---- Theme setting ----
+# Custom reusable theme for consistency
+theme_setting <- theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(size = 14, face = "bold"),
+    legend.text  = element_text(size = 12),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_text(size = 14, color = "black"),
+    axis.text.x = element_text(size = 12, color = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+colvars = c("MedicalDecision_ever", "MedicalWorth_ever", "MedicalEnd_ever", "MedicalFlex_ever", "MedicalAskDoc_ever", "highstakeMed_ever")
+
+# 03.3 Percentage of 5-domain completion BY FINANCIAL DELEGATION STATUS ----
+df_IADL_FinDel2 <- df_IADL[!is.na(df_IADL$FinanceDelegate2),]
+
+summary_df2 <- df_IADL_FinDel2 %>%
+  pivot_longer(cols = colvars, names_to = "variable", values_to = "response") %>%
+  # Keep only "1 - yes"
+  filter(response == "1 - Done before") %>%
+  # Group by type and variable
+  group_by(Country,FinanceDelegate2, variable) %>%
+  summarise(
+    n_yes = n(),
+    n_total = nrow(df_IADL_FinDel2[df_IADL_FinDel2$FinanceDelegate2 == unique(FinanceDelegate2) & df_IADL_FinDel2$Country == unique(Country), ]),
+    prop = n_yes / n_total,
+  # 95% confidence interval for proportion (using binomial approximation)
+    se = sqrt(prop * (1 - prop) / n_total),
+    lower = prop - 1.96 * se,
+    upper = prop + 1.96 * se,
+    .groups = "drop"
+  ) %>%
+  mutate(variable = factor(variable, levels = c("MedicalAskDoc_ever", "MedicalFlex_ever", "MedicalEnd_ever", "MedicalWorth_ever", "MedicalDecision_ever", "highstakeMed_ever"),
+                           labels = c("Asking Questions of medical providers",
+                                      "Flexibility for surrogate decision making",
+                                      "Quality of Life (Medical Care)",
+                                      "Quality of Life (Health Situations)",
+                                      "Role of Medical Decision Making",
+                                      "Discussed any SDM domains")))
+
+# Plot
+'US'
+summary_df2_US <- subset(summary_df2, Country=="US")
+plot_FinDel_SDM_us <- ggplot(summary_df2_US, aes(x = variable, y = prop * 100, fill = FinanceDelegate2)) +
+  geom_col(aes(y = 100),
+           fill = "grey90",      # light grey background
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = lower * 100, ymax = upper * 100),
+                width = 0.2,
+                position = position_dodge(width = 0.8)) +
+  geom_text(aes(y = (prop * 100) / 2, label = sprintf("%.1f%%", prop * 100)),
+            position = position_dodge(width = 0.8),
+            vjust = 0.5, 
+            color = "black",size = 4) +
+  labs(title = NULL, x = NULL, y = NULL) +
+  coord_flip() +  # horizontal bars
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_manual(
+    name = "Financial digital proxy status",  #  custom legend title
+    values = c("0 - No" = "tomato", "2 - Assist-Informal" = "steelblue","3 - Assist-Formal" = "turquoise"), # custom labels
+    labels = c("Not a digital proxy (n = 322)", "Informal proxy (n = 90)","Formal proxy (n = 178)")
+  )+
+  theme_setting
+
+
+# 03.4 Percentage of 5-domain completion BY MEDICAL DELEGATION STATUS ----
+df_IADL_MedDel2 <- df_IADL[!is.na(df_IADL$MedicalDelegate2),]
+summary_df3 <- df_IADL_MedDel2 %>%
+  pivot_longer(cols = colvars, names_to = "variable", values_to = "response") %>%
+  # Keep only "1 - yes"
+  filter(response == "1 - Done before") %>%
+  # Group by type and variable
+  group_by(Country,MedicalDelegate2, variable) %>%
+  summarise(
+    n_yes = n(),
+    n_total = nrow(df_IADL_MedDel2[df_IADL_MedDel2$MedicalDelegate2 == unique(MedicalDelegate2) & df_IADL_MedDel2$Country == unique(Country), ]),
+    prop = n_yes / n_total,
+    # 95% confidence interval for proportion (using binomial approximation)
+    se = sqrt(prop * (1 - prop) / n_total),
+    lower = prop - 1.96 * se,
+    upper = prop + 1.96 * se,
+    .groups = "drop"
+  ) %>%
+  mutate(variable = factor(variable, levels = c("MedicalAskDoc_ever", "MedicalFlex_ever", "MedicalEnd_ever", "MedicalWorth_ever", "MedicalDecision_ever", "highstakeMed_ever"),
+                           labels = c("Asking Questions of medical providers",
+                                      "Flexibility for surrogate decision making",
+                                      "Quality of Life (Medical Care)",
+                                      "Quality of Life (Health Situations)",
+                                      "Role of Medical Decision Making",
+                                      "Discussed any SDM domains")))
+
+# Plot
+'US'
+summary_df3_US <- subset(summary_df3, Country=="US")
+plot_MedDel_SDM_us <- ggplot(summary_df3_US, aes(x = variable, y = prop * 100, fill = MedicalDelegate2)) +
+  geom_col(aes(y = 100),
+           fill = "grey90",      # light grey background
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = lower * 100, ymax = upper * 100),
+                width = 0.2,
+                position = position_dodge(width = 0.8)) +
+  geom_text(aes(y = (prop * 100) / 2, label = sprintf("%.1f%%", prop * 100)),
+            position = position_dodge(width = 0.8),
+            vjust = 0.5, 
+            color = "black",size = 4) +
+  labs(title = NULL, x = NULL, y = NULL) +
+  coord_flip() +  # horizontal bars
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_manual(
+    name = "Medical digital delegation status",  #  custom legend title
+    values = c("0 - No" = "tomato", "2 - Assist-Informal" = "steelblue","3 - Assist-Formal" = "turquoise"), # custom labels
+    labels = c("Not a digital proxy (n = 336)", "Informal proxy (n = 93)","Formal proxy (n = 165)")
+  )+
+  theme_setting
+
+
+# 03.5 Percentage of 5-domain completion BY LPA STATUS ----
+df_IADL_LPA <- df_IADL[!is.na(df_IADL$FinanceLPA),]
+summary_df4 <- df_IADL_LPA %>%
+  pivot_longer(cols = colvars, names_to = "variable", values_to = "response") %>%
+  # Keep only "1 - yes"
+  filter(response == "1 - Done before") %>%
+  # Group by type and variable
+  group_by(Country,FinanceLPA, variable) %>%
+  summarise(
+    n_yes = n(),
+    n_total = nrow(df_IADL_LPA[df_IADL_LPA$FinanceLPA == unique(FinanceLPA) & df_IADL_LPA$Country == unique(Country), ]),
+    prop = n_yes / n_total,
+    # 95% confidence interval for proportion (using binomial approximation)
+    se = sqrt(prop * (1 - prop) / n_total),
+    lower = prop - 1.96 * se,
+    upper = prop + 1.96 * se,
+    .groups = "drop"
+  ) %>%
+  mutate(variable = factor(variable, levels = c("MedicalAskDoc_ever", "MedicalFlex_ever", "MedicalEnd_ever", "MedicalWorth_ever", "MedicalDecision_ever", "highstakeMed_ever"),
+                           labels = c("Asking Questions of medical providers",
+                                      "Flexibility for surrogate decision making",
+                                      "Quality of Life (Medical Care)",
+                                      "Quality of Life (Health Situations)",
+                                      "Role of Medical Decision Making",
+                                      "Discussed any SDM domains")))
+
+# Plot
+'US'
+summary_df4_US <- subset(summary_df4, Country=="US")
+plot_LPA_SDM_us <- ggplot(summary_df4_US, aes(x = variable, y = prop * 100, fill = FinanceLPA)) +
+  geom_col(aes(y = 100),
+           fill = "grey90",      # light grey background
+           width = 0.7,
+           position = position_dodge(width = 0.8)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = lower * 100, ymax = upper * 100),
+                width = 0.2,
+                position = position_dodge(width = 0.8)) +
+  geom_text(aes(y = (prop * 100) / 2, label = sprintf("%.1f%%", prop * 100)),
+            position = position_dodge(width = 0.8),
+            vjust = 0.5, 
+            color = "black",size = 4) +
+  labs(title = NULL, x = NULL, y = NULL) +
+  coord_flip() +  # horizontal bars
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) +
+  scale_fill_manual(
+    name = "Legal/Finance digital delegation status",  #  custom legend title
+    values = c("0 - No LPA" = "tomato", "1 - Yes LPA" = "turquoise"), # custom labels
+    labels = c("No LPA (n = 414)", "Yes LPA (n = 180)")
+  )+
+  theme_setting
+
+
+# 04. Final list of plots ----
+plot_FinDel_SDM_us
+
+plot_MedDel_SDM_us
+
+plot_LPA_SDM_us
+
+ggsave("02_analysis/02_results/plots/plot_FinDel_SDM_us.png", plot_FinDel_SDM_us, width = 15, height = 8, units = "in", dpi = 600)
+ggsave("02_analysis/02_results/plots/plot_MedDel_SDM_us.png", plot_MedDel_SDM_us, width = 15, height = 8, units = "in", dpi = 600)
+ggsave("02_analysis/02_results/plots/plot_LPA_SDM_us.png", plot_LPA_SDM_us, width = 15, height = 8, units = "in", dpi = 600)
+
+
+
+# 05. Distribution of 13-item SDM SHOULD HAVES ----
+
+## Plotting -> FOCUS ON US ONLY DATA and only stratified by Medical Delegation status
+df_props_should <- df_IADL_us %>%
+  count(highstakeMed_should_count, name = "count") %>%
+  mutate(prop = count / sum(count),
+         MedicalDelegate2 = "All")
+
+df_props_should2 <- df_IADL_us %>%
+  group_by(MedicalDelegate2, highstakeMed_should_count) %>% 
+  summarise(count = n(), .groups = "drop_last") %>%
+  mutate(prop = count / sum(count))
+
+df_props_should_all <- bind_rows(df_props_should, df_props_should2)
+df_props_should_all$MedicalDelegate2 <- factor(df_props_should_all$MedicalDelegate2,
+                                               levels = c("All", "3 - Assist-Formal", "2 - Assist-Informal", "0 - No"),
+                                               labels = c("All (N=594)", "Formal digital proxy (N=165)", "Informal digital proxy (N=93)", "Non digital proxy (N=336)"))
+
+rm(df_props_should, df_props_should2)
+
+
+plot_US_shouldhaves_count_MedDel <- ggplot(df_props_should_all, aes(x = highstakeMed_should_count, y = prop, fill = MedicalDelegate2)) +
+  geom_bar(stat = "identity",
+           width = 0.8,
+           position = position_dodge(width = 0.9)) +
+  geom_text(aes(label = scales::percent(prop, accuracy = 0.1)),
+            position = position_dodge(width = 0.9),
+            vjust = -0.5,
+            size = 3.5) +
+  scale_x_continuous(breaks = 0:13) +
+  scale_y_continuous(
+    limits = c(0, 0.70),
+    labels = scales::percent_format(accuracy = 1),
+    breaks = seq(0, 0.70, by = 0.10)) +
+  scale_fill_manual(
+    name = "Medical digital delegation status",  #  custom legend title
+    values = c("All (N=594)" = "darkblue", "Non digital proxy (N=336)" = "tomato", "Informal digital proxy (N=93)" = "steelblue","Formal digital proxy (N=165)" = "turquoise"), # custom labels
+  )+
+  labs(x = "Number of ACP SDM 'should haves' (out of 13 items)",
+       y = "Proportion") +
+  theme_setting
+
+ggsave("02_analysis/02_results/plots/plot_US_shouldhaves_count_MedDel.png", plot_US_shouldhaves_count_MedDel, width = 15, height = 8, units = "in", dpi = 600)
+
+
+
+# BY 13 INDIVIDUAL ITEMS ====
+
+total_by_delegate <- df_IADL_us %>%
+  group_by(MedicalDelegate2) %>%
+  summarise(total_n = n_distinct(PID), .groups = "drop")
+
+
+medDec = c("MedicalDecisionPerson", "MedicalDecisionDoctor", "MedicalSignPapers")
+medWorth = c("MedicalWorthPerson", "MedicalWorthDoctor", "MedicalWorthFamily")
+medEnd = c("MedicalEndPerson", "MedicalEndDoctor", "MedicalEndFamily")
+medFlex = c("MedicalFlexibilityPerson", "MedicalFlexibilityDoctor", "MedicalFlexibilityFamily")
+medAsk = c("MedicalDoctorQuestions")
+
+cols_13items = c(medDec, medWorth, medEnd, medFlex, medAsk)
+
+
+summary_df_test_us <- df_IADL_us %>%
+  pivot_longer(cols = all_of(cols_13items),
+               names_to = "variable", values_to = "response") %>%
+  group_by(MedicalDelegate2, variable, response) %>%
+  summarise(
+    n = n(), .groups = "drop")%>%
+  left_join(total_by_delegate, by = "MedicalDelegate2") %>%
+  mutate(
+    prop = n / total_n,
+    se = sqrt(prop * (1 - prop) / total_n),
+    lower = prop - 1.96 * se,
+    upper = prop + 1.96 * se,
+  )%>%
+  mutate(
+    variable = factor(variable, levels = c("MedicalDecisionPerson", "MedicalDecisionDoctor", "MedicalSignPapers", 
+                                           "MedicalWorthPerson", "MedicalWorthDoctor", "MedicalWorthFamily",
+                                           "MedicalEndPerson", "MedicalEndDoctor", "MedicalEndFamily",
+                                           "MedicalFlexibilityPerson", "MedicalFlexibilityDoctor", "MedicalFlexibilityFamily",
+                                           "MedicalDoctorQuestions"),
+                      labels = c("Discussed role of SDM - with the person", "SDM - with Doctor", "Signing official SDM papers", 
+                                 "Discussed EoL Health Situations - with the person", "EoL HS - with Doctor", "EoL HS - with family members",
+                                 "Discussed EoL Care - with the person", "EoL Care - with Doctor", "EoL Care - with family members",
+                                 "Discussed SDM Flexibility - with the person", "SDM Flex - with Doctor", "SDM Flex - with family members",
+                                 "Asked Medical Doctor Questions"))
+  )
+
+summary_df_test_us$response <- factor(summary_df_test_us$response,
+                                         levels = c(0,1,2),
+                                         labels = c("0 - No, no need",
+                                                    "1 - No, but should have",
+                                                    "2 - Yes, done"), ordered = TRUE)
+summary_df_test_us$response
+
+'
+ggplot(summary_df_test_US, aes(x = forcats::fct_rev(variable), y = prop, fill = as.factor(response))) +
+  # Stacked bars (fill determined by response)
+  geom_col(position = "stack") +
+  # Labels for each segment
+  geom_label(
+    aes(label = paste0(formatC(100 * prop, format = "f", digits = 1), "%")),
+    position = position_stack(vjust = 0.5),
+    size = 4,
+    label.size = NA
+  ) +
+  scale_y_continuous(labels = percent_format(accuracy = 0.1),
+                     limits = c(0,1)) +
+  labs(title = "US", x = NULL, y = NULL) +
+  coord_flip() +
+  theme_setting
+'
+
+
+# US data only ----
+plot_US_shouldhaves_MedDel2 <- ggplot(
+  subset(summary_df_test_us, response == "1 - No, but should have"),
+  aes(x = forcats::fct_rev(variable),
+      y = prop,
+      fill = MedicalDelegate2)
+) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.8),
+                width = 0.2) +
+  geom_text(
+    aes(y = prop / 2, label = sprintf("%.1f%%", prop * 100)),
+    position = position_dodge(width = 0.8),
+    vjust = 0.5,
+    size = 4,
+    color = "black"
+  ) +
+  scale_fill_manual(
+    name = "Medical digital delegation status",  #  custom legend title
+    values = c("0 - No" = "tomato", "2 - Assist-Informal" = "steelblue","3 - Assist-Formal" = "turquoise"), # custom labels
+    labels = c("No assistance (n = 333)", "Informal delegation (n = 91)","Formal delegation (n = 163)")
+  )+
+  scale_y_continuous(labels = percent_format(accuracy = 0.1), limits = c(0, 1)) +
+  labs(title = "", x = NULL, y = "Proportion of respondents who reported they should have completed the item", fill = "Status") +
+  coord_flip(clip = "off") +
+  theme_minimal() +
+  theme(axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y = element_text(size = 14, color = "black"),
+        axis.text.x = element_text(size = 12, color = "black"),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.y = element_blank(),
+        legend.position = "bottom")
+
+ggsave("02_analysis/02_results/plots/plot_US_shouldhaves.png", plot_US_shouldhaves, width = 15, height = 8, units = "in", dpi = 600)
